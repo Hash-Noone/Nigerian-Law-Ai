@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "law": "Nigeria Data Protection Act 2023",
+        "section": "Section 24",
+        "title": "Principles of processing personal data",
+        "content": "Personal data shall be processed in accordance with the principles set out in the Nigeria Data Protection Act 2023.",
+        "jurisdiction": "Federal"
+    },
+    {
+        "id": 2,
+        "law": "Nigeria Data Protection Act 2023",
+        "section": "Section 25",
+        "title": "Lawful basis for processing",
+        "content": "A data controller or data processor shall ensure that personal data is processed lawfully and in accordance with a lawful basis provided by the Act.",
+        "jurisdiction": "Federal"
+    },
+    {
+        "id": 3,
+        "law": "Labour Act",
+        "section": "Section 11",
+        "title": "Termination of contracts",
+        "content": "The Labour Act provides rules concerning the termination of contracts of employment and the notice required in certain circumstances.",
+        "jurisdiction": "Federal"
+    }
+]
