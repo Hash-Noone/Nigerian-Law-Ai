@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<!--
+    Nigerian Law AI - chat UI
+    ==========================
+    This is ONE plain HTML file: the CSS lives in a <style> tag and the
+    JavaScript lives in a <script> tag at the bottom. There is no build
+    step (no npm, no React, no bundler) - you just open this file, or have
+    FastAPI serve it, and it works.
+
+    How it talks to your backend
+    -----------------------------
+    All it does is call your FastAPI "/ask" endpoint with fetch() and
+    render whatever JSON comes back. Look at the bottom <script> tag for
+    the actual logic - everything above it is just layout and styling.
+
+    Where this file lives
+    -----------------------
+    main.py mounts this "static" folder at /ui, so once you run
+    "uvicorn main:app --reload" you can open:
+
+        http://127.0.0.1:8000/ui/
+
+    Because the page and the API are served by the SAME FastAPI app (same
+    "origin", in browser terms), the fetch() call below can just say
+    "/ask" - no need to spell out "http://127.0.0.1:8000/ask", and no CORS
+    (Cross-Origin Resource Sharing) setup is needed. If you later host this
+    HTML file somewhere else (Vercel) while the API stays elsewhere
+    (Render), see the "DEPLOYING SEPARATELY" comment near the top of the
+    <script> tag - that's the one thing you'll need to change.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nigerian Law AI</title>
+
+<style>
+    /* ---------------------------------------------------------------
+       Basic page layout. Nothing fancy - just enough to make a chat
+       box look like a chat box. Read top to bottom; later rules only
+       override earlier ones where a class is more specific.
+    ----------------------------------------------------------------*/
+
+    * {
+        /* Makes width/height calculations include padding and border,
+           which is far less confusing than the browser default. */
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        background: #f4f5f7;
+        color: #1a1a1a;
+        /* Full-height flex column: header, then chat area, then input bar. */
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+    }
+
+    header {
+        padding: 16px 20px;
+        background: #0b6e4f;   /* a Nigeria-flag-ish green */
+        color: white;
+        flex-shrink: 0;        /* never let the header get squeezed */
+    }
+
+    header h1 {
+        margin: 0;
+        font-size: 18px;
+    }
+
+    header p {
+        margin: 4px 0 0;
+        font-size: 12px;
+        opacity: 0.85;
+    }
+
+    /* The scrollable list of chat bubbles. flex: 1 makes it fill all
+       the space that's left over after the header and input bar. */
+    #chat {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .message {
+        max-width: 70%;
+        padding: 12px 14px;
+        border-radius: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;   /* keep line breaks the model/user typed */
+    }
+
+    .message.user {
+        align-self: flex-end;      /* push to the right side of the column */
+        background: #0b6e4f;
+        color: white;
+        border-bottom-right-radius: 2px;
+    }
+
+    .message.assistant {
+        align-self: flex-start;    /* stay on the left */
+        background: white;
+        border: 1px solid #e2e2e2;
+        border-bottom-left-radius: 2px;
+    }
+
+    .message.error {
+        align-self: flex-start;
+        background: #fdecea;
+        border: 1px solid #f5c2c0;
+        color: #7a1f1a;
+    }
+
+    /* Small "not grounded" warning banner shown above an answer when the
+       backend flagged that the model didn't cite its sources properly. */
+    .warning-banner {
+        margin-bottom: 8px;
+        padding: 6px 10px;
+        background: #fff4e5;
+        border: 1px solid #ffdca8;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #7a4a00;
+    }
+
+    /* Each cited source is a native <details> element, so clicking the
+       summary line expands/collapses the excerpt - no JS needed for that
+       part, the browser does it for free. */
+    .sources {
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .sources summary {
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: #0b6e4f;
+    }
+
+    .sources summary:hover {
+        text-decoration: underline;
+    }
+
+    .source-meta {
+        font-size: 12px;
+        color: #666;
+        margin: 4px 0 6px;
+    }
+
+    .source-text {
+        font-size: 13px;
+        background: #f8f9fa;
+        border-left: 3px solid #0b6e4f;
+        padding: 8px 10px;
+        white-space: pre-wrap;
+    }
+
+    .disclaimer {
+        font-size: 11px;
+        color: #888;
+        margin-top: 8px;
+    }
+
+    /* "Thinking..." placeholder bubble shown while we wait for the API. */
+    .thinking {
+        font-style: italic;
+        color: #888;
+    }
+
+    /* ---------------------------- input bar ------------------------ */
+    #input-bar {
+        flex-shrink: 0;
+        display: flex;
+        gap: 8px;
+        padding: 14px 20px;
+        background: white;
+        border-top: 1px solid #e2e2e2;
+    }
+
+    #question {
+        flex: 1;
+        padding: 10px 12px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        font-size: 14px;
+    }
+
+    #question:disabled {
+        background: #f4f4f4;
+    }
+
+    #send {
+        padding: 10px 18px;
+        border: none;
+        border-radius: 8px;
+        background: #0b6e4f;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    #send:disabled {
+        background: #a7c9bd;
+        cursor: not-allowed;
+    }
+</style>
+</head>
+<body>
+
+    <header>
+        <h1>Nigerian Law AI</h1>
+        <p>Answers come only from the Constitution and laws in this project's own database.</p>
+    </header>
+
+    <!-- Every question/answer bubble gets appended in here by JavaScript. -->
+    <div id="chat"></div>
+
+    <div id="input-bar">
+        <input
+            id="question"
+            type="text"
+            placeholder="Ask a question, e.g. 'What does section 39 say about freedom of expression?'"
+            autocomplete="off"
+        />
+        <button id="send">Send</button>
+    </div>
+
+<script>
+/* =====================================================================
+   ALL the behaviour lives in this one <script> tag. It's split into
+   clearly-labelled sections:
+
+     1. Configuration        - the one line to change if you deploy the
+                                UI and the API separately.
+     2. Small helper functions for building the chat bubbles.
+     3. The actual "ask a question" flow.
+     4. Wiring up the input box and Send button.
+
+   If you're new to JavaScript: everything here is "vanilla" JS (no
+   libraries). The two DOM APIs doing all the work are
+   document.createElement (build an HTML element in memory) and
+   element.appendChild (put it on the page).
+   ===================================================================== */
+
+
+/* --------------------------- 1. CONFIGURATION ------------------------
+   Because this page is served by FastAPI itself (see the top-of-file
+   comment), a RELATIVE path like "/ask" is enough - the browser sends
+   the request to whatever host is currently in the address bar.
+
+   DEPLOYING SEPARATELY (e.g. this HTML on Vercel, the API on Render):
+   change this to the API's full URL, for example:
+
+       const API_URL = "https://your-api.onrender.com/ask";
+
+   and in main.py add FastAPI's CORS middleware so the browser is
+   allowed to call a different origin - main.py has a commented-out
+   example ready to uncomment when you get there.
+------------------------------------------------------------------- */
+const API_URL = "/ask";
+
+
+/* --------------------------- 2. HELPERS ------------------------------- */
+
+// Grab the two elements we'll be updating constantly, once, up front.
+const chatEl = document.getElementById("chat");
+const questionEl = document.getElementById("question");
+const sendEl = document.getElementById("send");
+
+/**
+ * Create a chat bubble <div> and add it to the page.
+ * @param {"user"|"assistant"|"error"} role - decides which CSS class
+ *        (and therefore colour/alignment) the bubble gets.
+ * @param {string} text - plain text to show (safe from HTML injection,
+ *        see the note on textContent below).
+ * @returns the bubble element, in case the caller wants to fill it in
+ *          further (used for the "thinking..." placeholder).
+ */
+function addMessage(role, text) {
+    const bubble = document.createElement("div");
+    bubble.className = "message " + role;
+
+    // IMPORTANT: we use .textContent, not .innerHTML, here. textContent
+    // treats the string as plain text even if it contains characters
+    // like "<" or "&", so there is no way for a question (or a model
+    // answer) to inject HTML/JavaScript into the page. Never swap this
+    // for innerHTML unless you also escape the string yourself.
+    bubble.textContent = text;
+
+    chatEl.appendChild(bubble);
+
+    // Scroll the chat area down so the newest message is visible.
+    chatEl.scrollTop = chatEl.scrollHeight;
+
+    return bubble;
+}
+
+/**
+ * Build the little "not grounded" warning banner shown above an answer
+ * when the backend flagged that the model's citations didn't check out.
+ * (See main.py's ask_question(): it sets grounded=False and adds a
+ * "warning" field in exactly this situation.)
+ */
+function buildWarningBanner(warningText) {
+    const banner = document.createElement("div");
+    banner.className = "warning-banner";
+    banner.textContent = "⚠ " + warningText;
+    return banner;
+}
+
+/**
+ * Build one collapsible <details> block for a single cited source.
+ * `source` is one entry from the "sources" array the API returns, e.g.:
+ *   {
+ *     "n": 1,
+ *     "source": "Constitution of the Federal Republic of Nigeria 1999",
+ *     "reference": "Section 39",
+ *     "title": "Chapter IV: Fundamental Rights",
+ *     "pages": "27-27",
+ *     "score": 0.62,
+ *     "text": "(1) Every person shall be entitled to freedom..."
+ *   }
+ */
+function buildSourceElement(source) {
+    const details = document.createElement("details");
+
+    // <summary> is the always-visible clickable line; the rest of the
+    // <details> content is hidden until the user clicks it.
+    const summary = document.createElement("summary");
+    summary.textContent = `[${source.n}] ${source.source} - ${source.reference}`;
+    details.appendChild(summary);
+
+    const meta = document.createElement("div");
+    meta.className = "source-meta";
+    const pageInfo = source.pages ? `pages ${source.pages}` : "";
+    const scoreInfo = typeof source.score === "number" ? `match score ${source.score.toFixed(2)}` : "";
+    meta.textContent = [source.title, pageInfo, scoreInfo].filter(Boolean).join(" • ");
+    details.appendChild(meta);
+
+    const excerpt = document.createElement("div");
+    excerpt.className = "source-text";
+    excerpt.textContent = source.text;
+    details.appendChild(excerpt);
+
+    return details;
+}
+
+/**
+ * Render a full assistant reply: the answer text, an optional warning
+ * banner, the list of cited sources, and the disclaimer - all inside
+ * one "assistant" bubble.
+ * `data` is the parsed JSON body of the /ask response (see main.py's
+ * ask_question() return value for the exact shape).
+ */
+function renderAssistantReply(data) {
+    const bubble = document.createElement("div");
+    bubble.className = "message assistant";
+
+    if (data.warning) {
+        bubble.appendChild(buildWarningBanner(data.warning));
+    }
+
+    // A plain text node for the answer itself (see the textContent note
+    // in addMessage() above - same reasoning applies here).
+    const answerText = document.createElement("div");
+    answerText.textContent = data.answer;
+    bubble.appendChild(answerText);
+
+    if (data.sources && data.sources.length > 0) {
+        const sourcesWrap = document.createElement("div");
+        sourcesWrap.className = "sources";
+        for (const source of data.sources) {
+            sourcesWrap.appendChild(buildSourceElement(source));
+        }
+        bubble.appendChild(sourcesWrap);
+    }
+
+    if (data.disclaimer) {
+        const disclaimer = document.createElement("div");
+        disclaimer.className = "disclaimer";
+        disclaimer.textContent = data.disclaimer;
+        bubble.appendChild(disclaimer);
+    }
+
+    chatEl.appendChild(bubble);
+    chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+
+/* --------------------------- 3. THE ASK FLOW --------------------------- */
+
+/**
+ * Send one question to the API and render whatever comes back.
+ * This function is `async` so we can use `await` inside it instead of
+ * chaining .then(...) calls - the two behave the same, `await` just
+ * reads top-to-bottom like ordinary code.
+ */
+async function askQuestion(question) {
+    // Show the user's own question immediately, before the network
+    // request even starts, so the UI feels responsive.
+    addMessage("user", question);
+
+    // A temporary "thinking..." bubble, replaced once the real answer
+    // arrives (or removed if something goes wrong).
+    const thinkingBubble = addMessage("assistant", "Thinking...");
+    thinkingBubble.classList.add("thinking");
+
+    // Disable the input while we wait, so the user can't fire off a
+    // second question (and a second overlapping request) by accident.
+    questionEl.disabled = true;
+    sendEl.disabled = true;
+
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            // This has to match main.py's Question model:
+            //     class Question(BaseModel):
+            //         question: str
+            body: JSON.stringify({ question: question }),
+        });
+
+        // fetch() only rejects (throws) on a NETWORK failure (no
+        // internet, server down, CORS blocked). An HTTP error like 422
+        // or 502 still counts as a successful fetch, so we have to
+        // check response.ok ourselves and handle it as an error.
+        if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`Server returned ${response.status}: ${body}`);
+        }
+
+        const data = await response.json();
+
+        thinkingBubble.remove();
+        renderAssistantReply(data);
+
+    } catch (error) {
+        thinkingBubble.remove();
+        // Common causes here: the FastAPI server isn't running, or it's
+        // running on a different port than this page was loaded from.
+        addMessage("error", "Something went wrong: " + error.message);
+
+    } finally {
+        // Whether it succeeded or failed, give control back to the user.
+        questionEl.disabled = false;
+        sendEl.disabled = false;
+        questionEl.focus();
+    }
+}
+
+
+/* --------------------------- 4. WIRING UP THE UI ----------------------- */
+
+function handleSend() {
+    const question = questionEl.value.trim();
+    if (!question) {
+        return; // ignore empty submissions
+    }
+    questionEl.value = "";
+    askQuestion(question);
+}
+
+// Clicking the Send button...
+sendEl.addEventListener("click", handleSend);
+
+// ...or pressing Enter while the input is focused, does the same thing.
+questionEl.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        handleSend();
+    }
+});
+
+// Put the cursor in the input box as soon as the page loads.
+questionEl.focus();
+</script>
+
+</body>
+</html>

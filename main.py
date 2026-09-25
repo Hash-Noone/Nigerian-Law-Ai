@@ -20,17 +20,20 @@ How an answer is produced (and why it stays inside YOUR database):
 A small LLM can still ignore instructions, which is why steps 1 and 3 are
 enforced in code rather than left to the prompt alone.
 
-Run:  uvicorn main:app --reload
+Run:            uvicorn main:app --reload
+Chat UI:        http://127.0.0.1:8000/ui/
+API docs:       http://127.0.0.1:8000/docs   (FastAPI generates this automatically)
 """
 
 import os
 import re
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field
 
-from config import LLM_MODEL, OPENROUTER_BASE_URL, TOP_K
+from config import LLM_MODEL, OPENROUTER_BASE_URL, STATIC_DIR, TOP_K
 from retrieval import Retriever
 
 # ------------------------------------------------------------------ setup
@@ -42,6 +45,35 @@ if not api_key:
     )
 
 app = FastAPI(title="Nigerian Law AI")
+
+# Serve static/index.html (the chat UI) at /ui, so opening
+# http://127.0.0.1:8000/ui/ in a browser loads the page. html=True means
+# a request for the folder itself ("/ui/") automatically serves its
+# index.html, the same way a plain web server would.
+#
+# Because the UI and the API below are served by this SAME FastAPI app,
+# they share one "origin" (host + port) as far as the browser is
+# concerned, so the page's fetch("/ask") call just works with no extra
+# setup. This mount is placed BEFORE the API routes are defined below
+# only for readability; FastAPI matches "/ask", "/laws" etc. by their
+# own exact paths regardless of where this line sits.
+app.mount("/ui", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
+
+# --- Deploying the UI and the API on two different hosts later (e.g. the
+# HTML on Vercel, this API on Render)? Two things change:
+#   1. In static/index.html, set API_URL to this API's full address.
+#   2. Uncomment the block below so the browser is allowed to call this
+#      API from that other origin (this is what CORS - Cross-Origin
+#      Resource Sharing - middleware is for).
+#
+# from fastapi.middleware.cors import CORSMiddleware
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["https://your-ui.vercel.app"],
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
+
 client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
 
 # Loaded once at startup (loading the model on every request would be very slow).

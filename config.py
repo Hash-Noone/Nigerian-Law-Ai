@@ -36,6 +36,8 @@ RECORDS_FILE = INDEX_DIR / "records.jsonl"      # the text + metadata that gets 
 EMBEDDINGS_FILE = INDEX_DIR / "embeddings.npy"  # one vector per record, same order
 INDEX_META_FILE = INDEX_DIR / "meta.json"       # remembers which model built the index
 
+STATIC_DIR = BASE_DIR / "static"  # the chat UI (index.html), served by main.py at /ui
+
 # ---------------------------------------------------------- constitution
 DOCUMENT_TITLE = "Constitution of the Federal Republic of Nigeria 1999 (as amended through 2011)"
 MAX_SECTION_NUMBER = 320  # the main body of the Constitution ends at section 320
@@ -53,6 +55,15 @@ MAX_TOPICS_EMBEDDED = 5
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 TOP_K = 5          # how many passages are handed to the LLM
 MIN_SCORE = 0.30   # cosine similarity below this = "not relevant". TUNE THIS (see README notes)
+
+# Section-aware expansion (see retrieval.py). A section is chunked only
+# because the embedding model has a size limit -- legally it's one unit, so
+# once semantic search says a section is relevant we hand the LLM the whole
+# thing rather than a random one-chunk fragment of it.
+EXPAND_TOP_SECTIONS = 3      # expand at most this many distinct sections/schedule parts
+MAX_SECTION_CHARS = 2500     # cap a single expanded section (e.g. the long definitions
+                             # section, 318) so one section can't crowd out everything else
+MAX_CONTEXT_CHARS = 6000     # stop adding passages once the combined context reaches this
 
 # ------------------------------------------------------------------ LLM
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
