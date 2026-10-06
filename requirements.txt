@@ -5,3 +5,10 @@ python-dotenv
 pypdf
 numpy
 sentence-transformers
+# needed only to re-run chunk_ndpa.py / chunk_police_act.py (the two
+# scanned-PDF sources) - also requires the "tesseract-ocr" and "poppler-
+# utils" system packages (apt install tesseract-ocr poppler-utils), and
+# pdftotext (from poppler-utils) is used directly by several other
+# chunk_*.py scripts via subprocess
+pytesseract
+pdf2image

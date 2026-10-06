@@ -57,6 +57,37 @@ from config import (
 # "what does section 36 say" -> 36
 SECTION_IN_QUERY = re.compile(r"\bsection\s+(\d{1,3}[a-z]?)\b", re.IGNORECASE)
 
+# When a question names a specific law ("the labour act", "the evidence
+# act"), an explicit "section N" should match ONLY that law - otherwise,
+# now that several laws share overlapping section numbers (they all have
+# their own "Section 92", "Section 6", etc.), "section 92 of the labour
+# act" would return every law's section 92 instead of just the one meant.
+# Each keyword maps to a substring that appears in that law's `source`
+# field (see the DOCUMENT_TITLE constants in the chunk_*.py scripts).
+LAW_NAME_HINTS = {
+    "criminal code": "Criminal Code",
+    "evidence act": "Evidence Act",
+    "labour act": "Labour Act",
+    "labor act": "Labour Act",
+    "administration of criminal justice act": "Administration of Criminal Justice",
+    "acja": "Administration of Criminal Justice",
+    "constitution": "Constitution",
+    "data protection act": "Data Protection",
+    "ndpa": "Data Protection",
+    "police act": "Police Act",
+}
+
+
+def detect_named_law(query):
+    """Return the `source`-matching substring for a law named in the
+    query, longest hint first (so "administration of criminal justice
+    act" isn't shadowed by a shorter, coincidentally-contained hint)."""
+    query_lower = query.lower()
+    for hint in sorted(LAW_NAME_HINTS, key=len, reverse=True):
+        if hint in query_lower:
+            return LAW_NAME_HINTS[hint]
+    return None
+
 # A chunk's id ends in its position within the section/schedule part, e.g.
 # "constitution-39-0", "constitution-39-1" -> 0, 1. Used only to put an
 # expanded section's chunks back in reading order.
@@ -161,13 +192,20 @@ class Retriever:
 
         # --- 1. EXPLICIT section number(s) named in the question.
         # Several sources can share a reference (e.g. two different laws both
-        # have a "Section 24"), so this can add more than one whole section.
+        # have a "Section 24"), so this can add more than one whole section -
+        # UNLESS the question names a specific law, in which case only that
+        # law's matching section is used (see detect_named_law() above).
+        named_law = detect_named_law(query)
         for number in SECTION_IN_QUERY.findall(query):
             reference = f"Section {number.upper()}"
             for key in list(self._groups):
-                if key[1] == reference and key not in used_keys:
-                    record, indices = self._merge_group(key, score=1.0, max_chars=MAX_SECTION_CHARS)
-                    add(record, 1.0, indices)
+                source, ref = key
+                if ref != reference or key in used_keys:
+                    continue
+                if named_law and named_law not in source:
+                    continue
+                record, indices = self._merge_group(key, score=1.0, max_chars=MAX_SECTION_CHARS)
+                add(record, 1.0, indices)
 
         # --- rank every chunk by meaning (one matrix-vector product scores
         # them all at once; vectors are unit length so the dot product is

@@ -193,9 +193,22 @@ def ask_question(data: Question):
     # everything that was retrieved so the user can check for themselves.
     shown = sorted(valid) or list(range(1, len(hits) + 1))
 
+    # If the model's citations don't check out, its answer text is not
+    # trustworthy (it may have guessed using nearby-sounding passages
+    # rather than actually answering from them). Rather than show that
+    # guess next to a warning -- which still reads as an answer -- we
+    # replace it, so the ONLY thing the user is asked to rely on is the
+    # source passages themselves.
+    displayed_answer = (
+        answer if grounded else
+        "I found some related passages, but couldn't produce a properly "
+        "grounded answer from them. Please check the source passages below "
+        "yourself; the database may simply not cover this question."
+    )
+
     result = {
         "question": data.question,
-        "answer": answer,
+        "answer": displayed_answer,
         "grounded": grounded,
         "sources": [
             {
@@ -213,9 +226,10 @@ def ask_question(data: Question):
     }
 
     if not grounded:
+        result["raw_model_answer"] = answer  # kept for debugging only; not shown by the UI
         result["warning"] = (
-            "The answer did not cite the supplied sources correctly. "
-            "Rely on the source passages below, not on the answer text."
+            "The model's answer did not cite the supplied sources correctly, "
+            "so it has been replaced above. Rely on the source passages below."
         )
 
     return result

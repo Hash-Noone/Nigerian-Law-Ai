@@ -38,6 +38,21 @@ INDEX_META_FILE = INDEX_DIR / "meta.json"       # remembers which model built th
 
 STATIC_DIR = BASE_DIR / "static"  # the chat UI (index.html), served by main.py at /ui
 
+# --------------------------------------------------------- law documents
+# Every law's chunk file, produced by a script like chunk_constitution.py.
+# build_index.py loads and combines ALL of these, so adding a new law is
+# just: write a <name>_chunks.jsonl file in the same schema, then add its
+# path here and re-run build_index.py. No other code needs to change.
+CHUNK_FILES = [
+    CHUNKS_FILE,  # the Constitution (produced by chunk_constitution.py)
+    DATA_DIR / "criminal_code_chunks.jsonl",  # Criminal Code ss.1-521 (chunk_criminal_code.py)
+    DATA_DIR / "evidence_act_chunks.jsonl",   # Evidence Act ss.1-230 (chunk_evidence_act.py)
+    DATA_DIR / "labour_act_chunks.jsonl",     # Labour Act ss.1-92 (chunk_labour_act.py) - OCR source, see its docstring
+    DATA_DIR / "acja_chunks.jsonl",           # Administration of Criminal Justice Act ss.1-495 (chunk_acja.py)
+    DATA_DIR / "ndpa_chunks.jsonl",           # Nigeria Data Protection Act ss.1-66 (chunk_ndpa.py) - OCR source
+    DATA_DIR / "police_act_chunks.jsonl",     # Police Act ss.1-142, 128 of 142 recovered (chunk_police_act.py) - OCR source
+]
+
 # ---------------------------------------------------------- constitution
 DOCUMENT_TITLE = "Constitution of the Federal Republic of Nigeria 1999 (as amended through 2011)"
 MAX_SECTION_NUMBER = 320  # the main body of the Constitution ends at section 320

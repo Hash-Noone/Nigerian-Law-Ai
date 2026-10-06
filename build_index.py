@@ -21,7 +21,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from config import (
-    CHUNKS_FILE,
+    CHUNK_FILES,
     EMBEDDING_MODEL,
     EMBEDDINGS_FILE,
     INDEX_DIR,
@@ -38,14 +38,20 @@ def load_jsonl(path):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def constitution_record(chunk):
-    """Convert a chunk from chunk_constitution.py to the common record format."""
+def law_chunk_record(chunk):
+    """
+    Convert a chunk from ANY law's chunker (chunk_constitution.py, or a
+    future chunk_<law>.py) into the common record format. This works for
+    any file that follows the same schema: id, document, reference,
+    context, topics, page_start, page_end, text. That schema is what makes
+    combining several laws' chunk files below possible.
+    """
     return {
         "id": chunk["id"],
         "source": chunk["document"],
         "reference": chunk["reference"],      # "Section 36" or "Schedule II, Part I"
         "title": chunk.get("context"),        # e.g. "Chapter IV: Fundamental Rights"
-        "topics": chunk.get("topics", []),    # Constitute topic tags, used only for search
+        "topics": chunk.get("topics", []),    # topic tags, used only for search
         "chapter": None,
         "pages": f"{chunk['page_start']}-{chunk['page_end']}",
         "jurisdiction": "Federal",
@@ -69,10 +75,23 @@ def law_record(law):
 
 
 def load_records():
-    records = [constitution_record(c) for c in load_jsonl(CHUNKS_FILE)]
+    records = []
+
+    # Every law's chunk file listed in config.CHUNK_FILES. Missing files are
+    # skipped with a warning rather than crashing, so you can list a law in
+    # CHUNK_FILES before its chunker has actually been run yet.
+    for path in CHUNK_FILES:
+        if not path.exists():
+            print(f"WARNING: {path} not found - skipping (run its chunker first).")
+            continue
+        chunks = load_jsonl(path)
+        records += [law_chunk_record(c) for c in chunks]
+        print(f"  {path.name}: {len(chunks)} chunks")
 
     with open(LAWS_FILE, "r", encoding="utf-8") as f:
-        records += [law_record(law) for law in json.load(f)]
+        laws = json.load(f)
+    records += [law_record(law) for law in laws]
+    print(f"  {LAWS_FILE.name}: {len(laws)} entries")
 
     return records
 
